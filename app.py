@@ -1,11 +1,13 @@
 import configparser
 import subprocess
 import shlex
+import getpass
+import os.path
 
 from flask import Flask
 
 
-# The main procedure:
+# The main procedures:
 # 1. Read the config file, check minimum integrity, set the defaults.
 # 2. Loop through all the sections in the config file, for each section entry, make a handler function for it,
 #  then register it with the http route path '/http_keyword_for_this_command/'.
@@ -21,6 +23,8 @@ from flask import Flask
 # 5. When the subprocess execution finished, we render the output into a simple html template, and return it
 #   as a http response.
 
+# The port number to listen on:
+port_number = 8095
 
 
 
@@ -30,9 +34,21 @@ from flask import Flask
 # We define the main command execution procedures here, so that it is separated with other stuff.
 
 
-def make_an_executor(command_string, working_dir):
+def make_an_executor(section_name, command_string, working_dir, mkdir_yn):
     # Execution handler function used as a view
     def executor(arguments_as_path = None):
+        # Error message string. Also used to keep a state of the execution.
+        # Initially it's empty, empty = no error,
+        #   were there any error, error info writes into it and it's no more empty, we know things has happened.
+        error_message = ''
+
+        # The state of the execution.
+        # Initially, it's false, only when the command execution is successful (return code=0), this becomes True.
+        execute_success = False
+
+        # The current user, this information sometimes is important to find out what's going wrong.
+        os_user_name = getpass.getuser()
+
 
         # Process of incoming argument string, translate the path style params to an list of arguments.
 
@@ -48,10 +64,26 @@ def make_an_executor(command_string, working_dir):
             pass
 
         # Check if working directory exist, if not, create it.
+        if os.path.exists(working_dir)
+            if os.path.isfile(working_dir):
+                # todo: raise an error, url exist but is not a directory
+                pass
+            else:
+                # working dir exists, and it's a directory, no need to do anything
+                pass
+        else:
+            # this path is not exsit, check the mkdir_yn tag
+            if mkdir_yn:
+                # True = if not exsit, mkdir this path
+                # todo: add try catch, mkdir may go wrong.
+                os.makedirs(working_dir)
+            else:
+                # False = if not exist, do not mkdir, and an error should be raised.
+                # todo: raise an error, return.
+                pass
 
-        # todo: there has to be some cleaner way to do it, deal with it later.
-        # todo: add try catch, it may fail due to permission or something else.
-        subprocess.call(['mkdir', '-p', working_dir])
+        # old version, replaced by above.
+        # subprocess.call(['mkdir', '-p', working_dir])
 
 
         # Slice the original command string to a list, so if there's any pre-defined argument, we can handle properly.
@@ -69,14 +101,21 @@ def make_an_executor(command_string, working_dir):
         command_and_args = command_and_args + argument_list
         print(command_and_args)
 
-
         # The final execution of the command we just put together.
 
         # todo: try catch, if this execution fails, an CalledProcessError will be raised.
         # todo: try catch, if the command is not there, an FileNotFoundError is raised.
-        output = subprocess.check_output(
-            command_and_args, cwd=working_dir, stdin=None, stderr=None, shell=False, universal_newlines=False)
-
+        try:
+            output_raw = subprocess.check_output(
+                command_and_args, cwd=working_dir, stdin=None, stderr=subprocess.STDOUT, shell=False, universal_newlines=False)
+        except FileNotFoundError:
+            error_message = 'Command or executable ' + command_and_args[0] + \
+                            ' is not exist, check your config, and make sure the executable is accessible' \
+                            ' in your working directory'
+            return error_message
+        except subprocess.CalledProcessError:
+            error_message = 'Command ' + ''.join(command_and_args) + ' exit with an error.\n'
+            error_message = error_message + ''
 
         # Return the execution result.
 
@@ -85,11 +124,17 @@ def make_an_executor(command_string, working_dir):
         #    and newline mark will be discarded, so we do not have the line-by-line display. To get it display properly,
         #    we have to give it some basic CSS hint, so the browser will not mess up the output.
         # todo: replace it with template for a cleaner implementation
-        print(output)
+        # The tempalte should display these infomations:
+        #   the final command, the user, the working dir, the result(status), the output (stdout,stderr),
+        #   error message if status is not OK (besides stderr, when other excpetion is raised, we should translate it).
+        #
+        print(output_raw)
         # output is a bytestream,so we have to transform it into a string using this trick.
-        output = "<span style=\"white-space: pre-wrap\">"+"".join(map(chr, output))+"</span>"
-        return output
+        output_string = "<span style=\"white-space: pre-wrap\">"+"".join(map(chr, output_raw))+"</span>"
+        return output_string
 
+    # Change the name of handler function to section name, to avoid name collision when Flask makes the route mapping.
+    executor.__name__ = section_name
     # return the function we just defined.
     return executor
 
@@ -106,7 +151,6 @@ config.read('command_bind.conf')
 # todo: try catch for every keywords, config files maybe compromised, and these keywords may not exist.
 # Get some default values for later use.
 # Get port number, used to tell flask which port to be on.
-default_port_number = config.defaults()['port']
 
 ### Init the flask instance app ###
 app = Flask(__name__)
@@ -116,6 +160,7 @@ app = Flask(__name__)
 
 # For each section, read the mandatory and optional fields, setup an executor function, and make binds.
 for section in config.sections():
+    print('\nSection: [' + section + ']\n')
     # Get the fields in this config section.
 
     # todo: try catch, if the config file is compromised and these mandatory fields are not there, raise an error.
@@ -132,16 +177,23 @@ for section in config.sections():
     working_directory = config[section]['working_directory']
     print('[' + section + ']' + ': working_directory = ' + working_directory)
 
+    # whether mkdir or not if working directory does not exist during runtime.
+    mkdir_if_working_directory_not_exist = config.getboolean(section,'mkdir_if_working_directory_not_exist')
+    print('[' + section + ']' + ': mkdir_if_working_directory_not_exist = ' + mkdir_if_working_directory_not_exist)
+
 
     # accept params or not, if it's not set, use the value in DEFAULT.
-    accept_arguments = config.getboolean(section, 'accept_parameters')
+    accept_arguments = config.getboolean(section, 'accept_arguments')
 
 
     # Get an predefined executor function according the options we just parsed.
 
     # The command and working directory is already known in config time.
+    # Flask asks for an unique name for each view function, because it use function names to handle the route,mapping,
+    #   so section name will be the function name so there's no collision.
+    # That's why we need section name, command, working_directory to make a execution handler.
     # The arguments (if any) will be passed during runtime when we got one.
-    executor = make_an_executor(command, working_directory)
+    executor = make_an_executor(section, command, working_directory, mkdir_if_working_directory_not_exist)
 
     # If accept arguments, all the string following the keyword will be copied to a string with all the '/' unaltered.
     # It can be later parsed to a list with separator '/'. So we can pass  holding the options and arguments.
@@ -159,8 +211,11 @@ for section in config.sections():
     app.route(route_string_without_args)(executor)
     print('[' + section + ']' + ': route_string_without_args = ' + route_string_without_args)
 
+    print('[' + section + ']' + ': Command and route registered SUCCESSFULLY.\n')
+
 
 # Entry point of this module.
+print('Port number: ' + port_number)
 
 if __name__ == '__main__':
-    app.run()
+    app.run(port = int(port_number))
