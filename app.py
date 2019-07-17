@@ -64,10 +64,12 @@ def make_an_executor(section_name, command_string, working_dir, mkdir_yn):
             pass
 
         # Check if working directory exist, if not, create it.
-        if os.path.exists(working_dir)
+        if os.path.exists(working_dir):
             if os.path.isfile(working_dir):
                 # todo: raise an error, url exist but is not a directory
-                pass
+                error_message = 'The working directory ' + working_dir + ' exists, and it\'s not a directory, ' \
+                                                                         'please check the configs'
+                return error_message
             else:
                 # working dir exists, and it's a directory, no need to do anything
                 pass
@@ -76,7 +78,15 @@ def make_an_executor(section_name, command_string, working_dir, mkdir_yn):
             if mkdir_yn:
                 # True = if not exsit, mkdir this path
                 # todo: add try catch, mkdir may go wrong.
-                os.makedirs(working_dir)
+                try:
+                    os.makedirs(working_dir)
+                except OSError as e:
+                    error_message = 'Your working directory ' + \
+                                    working_dir + ' does not exist, try to mkdir due to ' \
+                                                    'your config, but failed. Maybe a ' \
+                                                     'permission problem? Current user: ' + os_user_name + '\n\n' + \
+                        + e.strerror
+
             else:
                 # False = if not exist, do not mkdir, and an error should be raised.
                 # todo: raise an error, return.
@@ -179,7 +189,7 @@ for section in config.sections():
 
     # whether mkdir or not if working directory does not exist during runtime.
     mkdir_if_working_directory_not_exist = config.getboolean(section,'mkdir_if_working_directory_not_exist')
-    print('[' + section + ']' + ': mkdir_if_working_directory_not_exist = ' + mkdir_if_working_directory_not_exist)
+    print('[' + section + ']' + ': mkdir_if_working_directory_not_exist = ' + str(mkdir_if_working_directory_not_exist))
 
 
     # accept params or not, if it's not set, use the value in DEFAULT.
@@ -215,7 +225,7 @@ for section in config.sections():
 
 
 # Entry point of this module.
-print('Port number: ' + port_number)
+print('Port number: ' + str(port_number))
 
 if __name__ == '__main__':
-    app.run(port = int(port_number))
+    app.run(port = port_number)
