@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Output</title>
+    <style>
+        body {
+       	background-color: black;
+        }
+
+
+        .console {
+            font-family: courier, monospace;
+            /*color: #fff;*/
+            color: black;
+            width: 800px;
+            margin-left: 10px;
+            margin-right: auto;
+            margin-top: 20px;
+            font-size: 14px;
+            /*background-color: #000;*/
+            background-color: white;
+            padding-bottom: 10px;
+        }
+
+        .console li {
+            margin-bottom: 20px;
+        }
+
+        a {
+            color: #0bc;
+            text-decoration: none;
+        }
+
+        .title {
+            display: inline-block;
+            font-size: 25px;
+            font-weight: bold;
+            color: black;
+            background-color: white;
+            margin-top: 2px;
+            margin-bottom: 2px;
+            /*margin-right: auto;*/
+            padding-right: 5px;
+            padding-left: 3px;
+        }
+
+        .content {
+            background-color: black;
+            color: white;
+            white-space: pre-wrap;
+            padding-left: 5px;
+            margin-top: 10px;
+            width: 750px;
+            padding-top: 5px;
+            padding-bottom: 7px;
+
+        }
+
+        #a {
+            color: #0f0;
+        }
+
+        #c {
+            color: #0bc;
+        }
+
+        #b {
+            color: #ff0096;
+        }
+
+        #k {
+            animation: change 1s;
+        }
+
+        #op {
+            color: darkgray;
+        }
+
+
+
+    </style>
+</head>
+<body>
+<ul class="console">
+    <li><span class="title">Command: </span>
+        <div class="content">{{ command }}</div>
+    </li>
+        <li><span class="title">Status: </span>
+        <div class="content" {% if error_message %}
+        id="b"
+             {% else %}
+             id="a"
+        {% endif %}>{{ status }}</div></li>
+
+    <li><span class="title">User and Working Directory: </span>
+        <div class="content" >{{ username }}@{{ host_name }}: {{ working_dir }}</div>
+    </li>
+    <li><span class="title">Console Output: </span>
+        <div class="content">{{ output }}</div>
+    </li>
+</ul>
+
+</body>
+</html>

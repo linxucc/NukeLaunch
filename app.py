@@ -3,8 +3,9 @@ import subprocess
 import shlex
 import getpass
 import os.path
+import socket
 
-from flask import Flask
+from flask import Flask, render_template
 
 
 # The main procedures:
@@ -48,9 +49,14 @@ def make_an_executor(section_name, command_string, working_dir, mkdir_yn):
 
         # The current user, this information sometimes is important to find out what's going wrong.
         os_user_name = getpass.getuser()
+        # Get current host name, used to display a UNIX terminal style message to user.
+        try:
+            host_name = socket.gethostname()
+        except:
+            host_name = "Unknow_host"
 
 
-        # Process of incoming argument string, translate the path style params to an list of arguments.
+            # Process of incoming argument string, translate the path style params to an list of arguments.
 
         argument_list = []
         # If path arguments exist, and it's not empty, we parse arguments_as_path from string to an list.
@@ -66,7 +72,7 @@ def make_an_executor(section_name, command_string, working_dir, mkdir_yn):
         # Check if working directory exist, if not, create it.
         if os.path.exists(working_dir):
             if os.path.isfile(working_dir):
-                # todo: raise an error, url exist but is not a directory
+                # Working dir exist but it's not a directory, raise an error.
                 error_message = 'The working directory ' + working_dir + ' exists, and it\'s not a directory, ' \
                                                                          'please check the configs'
                 return error_message
@@ -74,10 +80,9 @@ def make_an_executor(section_name, command_string, working_dir, mkdir_yn):
                 # working dir exists, and it's a directory, no need to do anything
                 pass
         else:
-            # this path is not exsit, check the mkdir_yn tag
+            # working directory does not exist, check the mkdir_yn tag to see if we have to auto create it.
             if mkdir_yn:
-                # True = if not exsit, mkdir this path
-                # todo: add try catch, mkdir may go wrong.
+                # Directory does not exist, and auto-create is on, create it.
                 try:
                     os.makedirs(working_dir)
                 except OSError as e:
@@ -86,11 +91,15 @@ def make_an_executor(section_name, command_string, working_dir, mkdir_yn):
                                                     'your config, but failed. Maybe a ' \
                                                      'permission problem? Current user: ' + os_user_name + '\n\n' + \
                         + e.strerror
+                    return error_message
 
             else:
-                # False = if not exist, do not mkdir, and an error should be raised.
-                # todo: raise an error, return.
-                pass
+                # Directory does not exist, and auto-create is off, an error should be raised.
+                error_message = 'Your working directory ' + \
+                                    working_dir + ' does not exist, and you disabled auto-create.'\
+                                + 'Please check your working directory settings, make sure it exists,' \
+                                  ' or enable auto-create.'
+                return error_message
 
         # old version, replaced by above.
         # subprocess.call(['mkdir', '-p', working_dir])
@@ -113,19 +122,24 @@ def make_an_executor(section_name, command_string, working_dir, mkdir_yn):
 
         # The final execution of the command we just put together.
 
-        # todo: try catch, if this execution fails, an CalledProcessError will be raised.
-        # todo: try catch, if the command is not there, an FileNotFoundError is raised.
+        output_string = ''
         try:
             output_raw = subprocess.check_output(
                 command_and_args, cwd=working_dir, stdin=None, stderr=subprocess.STDOUT, shell=False, universal_newlines=False)
+            # output is a bytestream,so we have to transform it into a string using this trick.
+            output_string = "".join(map(chr, output_raw))
+            output_string.strip()
         except FileNotFoundError:
             error_message = 'Command or executable ' + command_and_args[0] + \
-                            ' is not exist, check your config, and make sure the executable is accessible' \
+                            ' does not exist, check your config, and make sure the executable is accessible' \
                             ' in your working directory'
             return error_message
-        except subprocess.CalledProcessError:
+        except subprocess.CalledProcessError as execution_error:
             error_message = 'Command ' + ''.join(command_and_args) + ' exit with an error.\n'
-            error_message = error_message + ''
+            error_message = error_message + 'Command return: \n' + str(execution_error.stderr)
+            error_code = execution_error.returncode
+            output_string = str(execution_error.output)
+            print(execution_error.output)
 
         # Return the execution result.
 
@@ -133,15 +147,35 @@ def make_an_executor(section_name, command_string, working_dir, mkdir_yn):
         #    make it a string. And by default, of any text displayed in a browser, the whitespaces will be collapsed,
         #    and newline mark will be discarded, so we do not have the line-by-line display. To get it display properly,
         #    we have to give it some basic CSS hint, so the browser will not mess up the output.
-        # todo: replace it with template for a cleaner implementation
+
         # The tempalte should display these infomations:
         #   the final command, the user, the working dir, the result(status), the output (stdout,stderr),
         #   error message if status is not OK (besides stderr, when other excpetion is raised, we should translate it).
         #
-        print(output_raw)
-        # output is a bytestream,so we have to transform it into a string using this trick.
-        output_string = "<span style=\"white-space: pre-wrap\">"+"".join(map(chr, output_raw))+"</span>"
-        return output_string
+        ##print(output_raw)
+
+
+
+        command_final_string = " ".join(str(x) for x in command_and_args)
+        command_final_string.strip()
+
+        print(output_string)
+        print(command_final_string)
+
+        if error_message:
+            status = "Fail" + " (ret = " + str(error_code) + " )"
+        else:
+            status = "OK"
+
+        return render_template("output_display.html",
+                               command = command_final_string,
+                               status = status,
+                               username = os_user_name,
+                               host_name = host_name,
+                               working_dir = working_dir,
+                               output = output_string,
+                               error_message = error_message)
+        #return output_string
 
     # Change the name of handler function to section name, to avoid name collision when Flask makes the route mapping.
     executor.__name__ = section_name
@@ -227,5 +261,6 @@ for section in config.sections():
 # Entry point of this module.
 print('Port number: ' + str(port_number))
 
+# todo, add arguments, to specify the port and ip mask, and config file
 if __name__ == '__main__':
     app.run(port = port_number)
