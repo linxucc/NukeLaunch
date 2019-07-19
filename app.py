@@ -124,19 +124,23 @@ def make_an_executor(section_name, command_string, working_dir, mkdir_yn):
 
         output_string = ''
         try:
+            # For a detailed explanation on [passing string or sequence] to subprocess calls, check this link:
+            # https://stackoverflow.com/questions/15109665/subprocess-call-using-string-vs-using-list
+            # Simply put, if shell=False, use sequnce, the first string in sequence will be the command, others ars.
+            # If shell=True, use string, or the first string in the seq will be the command, and all the others will
+            #   be treated as additional arguments to the shell itself.
             output_raw = subprocess.check_output(
                 command_and_args, cwd=working_dir, stdin=None, stderr=subprocess.STDOUT, shell=False, universal_newlines=False)
             # output is a bytestream,so we have to transform it into a string using this trick.
             output_string = "".join(map(chr, output_raw))
             output_string.strip()
         except FileNotFoundError:
-            error_message = 'Command or executable ' + command_and_args[0] + \
-                            ' does not exist, check your config, and make sure the executable is accessible' \
+            error_message = 'Command or executable \'' + command_and_args[0] + \
+                            '\' does not exist, check your config, and make sure the executable is accessible' \
                             ' in your working directory'
             return error_message
         except subprocess.CalledProcessError as execution_error:
-            error_message = 'Command ' + ''.join(command_and_args) + ' exit with an error.\n'
-            error_message = error_message + 'Command return: \n' + str(execution_error.stderr)
+            error_message = 'Command \'' + ' '.join(command_and_args) + '\' exit with an error.\n'
             error_code = execution_error.returncode
             output_string = str(execution_error.output)
             print(execution_error.output)
@@ -167,6 +171,7 @@ def make_an_executor(section_name, command_string, working_dir, mkdir_yn):
         else:
             status = "OK"
 
+
         return render_template("output_display.html",
                                command = command_final_string,
                                status = status,
@@ -185,14 +190,18 @@ def make_an_executor(section_name, command_string, working_dir, mkdir_yn):
 
 ### Read config files ###
 
-# todo: try catch, if config file not exist or can't read properly, stop and exit.
 # Use config parser to do the parse. config file is 'command_bind.conf'.
 config = configparser.ConfigParser()
 
+# Due to document, config.read returns a list of file names which were successfully parsed,
+# so if it's empty, an error should be raised.
+config_file_name_in_use = config.read('command_bind.conf')
+if not config_file_name_in_use:
+    # no file be parsed, raise an error, stop the code from init.
+    print("No config file was found, please check the config files.")
+    # todo: test this branch.
+    raise Exception("No config file was found, please check the config files.")
 
-config.read('command_bind.conf')
-
-# todo: try catch for every keywords, config files maybe compromised, and these keywords may not exist.
 # Get some default values for later use.
 # Get port number, used to tell flask which port to be on.
 

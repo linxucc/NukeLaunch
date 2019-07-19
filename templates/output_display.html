@@ -21,6 +21,7 @@
             /*background-color: #000;*/
             background-color: white;
             padding-bottom: 10px;
+            padding-top: 5px;
         }
 
         .console li {
@@ -83,15 +84,13 @@
 </head>
 <body>
 <ul class="console">
-    <li><span class="title">Command: </span>
+    <li><span class="title">Command</span>
         <div class="content">{{ command }}</div>
     </li>
         <li><span class="title">Status: </span>
-        <div class="content" {% if error_message %}
-        id="b"
-             {% else %}
-             id="a"
-        {% endif %}>{{ status }}</div></li>
+        <div class="content" {% if error_message %}id="b"{% else %}id="a"{% endif %}>{{ status }}{% if error_message %}
+
+{{ error_message }}{% endif %}</div></li>
 
     <li><span class="title">User and Working Directory: </span>
         <div class="content" >{{ username }}@{{ host_name }}: {{ working_dir }}</div>
