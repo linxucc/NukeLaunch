@@ -180,6 +180,7 @@ def make_an_executor(section_name, command_string, working_dir, mkdir_yn):
             status = "OK"
 
         return render_template("output_display.html",
+                               section_name=section_name,
                                command=command_final_string,
                                status=status,
                                username=os_user_name,
