@@ -198,7 +198,7 @@ def make_an_executor(section_name, command_string, working_dir, mkdir_yn):
 ### Read config files ###
 
 # Use config parser to do the parse. config file is 'command_bind.conf'.
-config = configparser.ConfigParser()
+config = configparser.ConfigParser(inline_comment_prefixes="#")
 
 # Due to document, config.read returns a list of file names which were successfully parsed,
 # so if it's empty, an error should be raised.
