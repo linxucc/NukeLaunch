@@ -7,7 +7,6 @@ import socket
 
 from flask import Flask, render_template
 
-
 # The main procedures:
 # 1. Read the config file, check minimum integrity, set the defaults.
 # 2. Loop through all the sections in the config file, for each section entry, make a handler function for it,
@@ -24,12 +23,16 @@ from flask import Flask, render_template
 # 5. When the subprocess execution finished, we render the output into a simple html template, and return it
 #   as a http response.
 
+# Default settings:
 # The port number to listen on:
 port_number = 8095
-
-
+# Default config file, set to the  'command_bind.conf' file in the same directory of application folder.
+# Could be override with -c arguments in the main.
+config_file_name_with_full_path = 'command_bind.conf'
 
 '''Factory function to generate execution handler functions for each command.'''
+
+
 # Note: We use a factory to generate actual functions to execute the command and bind with keyword.
 # The function returned by this function, will be decorated later with the path we configured in the config file.
 # We define the main command execution procedures here, so that it is separated with other stuff.
@@ -37,7 +40,7 @@ port_number = 8095
 
 def make_an_executor(section_name, command_string, working_dir, mkdir_yn):
     # Execution handler function used as a view
-    def executor(arguments_as_path = None):
+    def executor(arguments_as_path=None):
         # Error message string. Also used to keep a state of the execution.
         # Initially it's empty, empty = no error,
         #   were there any error, error info writes into it and it's no more empty, we know things has happened.
@@ -53,8 +56,7 @@ def make_an_executor(section_name, command_string, working_dir, mkdir_yn):
         try:
             host_name = socket.gethostname()
         except:
-            host_name = "Unknow_host"
-
+            host_name = "Unknown_host"
 
             # Process of incoming argument string, translate the path style params to an list of arguments.
 
@@ -88,22 +90,21 @@ def make_an_executor(section_name, command_string, working_dir, mkdir_yn):
                 except OSError as e:
                     error_message = 'Your working directory ' + \
                                     working_dir + ' does not exist, try to mkdir due to ' \
-                                                    'your config, but failed. Maybe a ' \
-                                                     'permission problem? Current user: ' + os_user_name + '\n\n' + \
-                        + e.strerror
+                                                  'your config, but failed. Maybe a ' \
+                                                  'permission problem? Current user: ' + os_user_name + '\n\n' + \
+                                    + e.strerror
                     return error_message
 
             else:
                 # Directory does not exist, and auto-create is off, an error should be raised.
                 error_message = 'Your working directory ' + \
-                                    working_dir + ' does not exist, and you disabled auto-create.'\
+                                working_dir + ' does not exist, and you disabled auto-create.' \
                                 + 'Please check your working directory settings, make sure it exists,' \
                                   ' or enable auto-create.'
                 return error_message
 
         # old version, replaced by above.
         # subprocess.call(['mkdir', '-p', working_dir])
-
 
         # Slice the original command string to a list, so if there's any pre-defined argument, we can handle properly.
 
@@ -113,7 +114,6 @@ def make_an_executor(section_name, command_string, working_dir, mkdir_yn):
         #    subprocess's mechanism.
 
         command_and_args = shlex.split(command_string)
-
 
         # Append the argument list to the command_and_args list. So if there's any incoming arguments, it will be added.
 
@@ -130,7 +130,8 @@ def make_an_executor(section_name, command_string, working_dir, mkdir_yn):
             # If shell=True, use string, or the first string in the seq will be the command, and all the others will
             #   be treated as additional arguments to the shell itself.
             output_raw = subprocess.check_output(
-                command_and_args, cwd=working_dir, stdin=None, stderr=subprocess.STDOUT, shell=False, universal_newlines=False)
+                command_and_args, cwd=working_dir, stdin=None, stderr=subprocess.STDOUT, shell=False,
+                universal_newlines=False)
             # output is a bytestream,so we have to transform it into a string using this trick.
             output_string = "".join(map(chr, output_raw))
             output_string.strip()
@@ -158,8 +159,6 @@ def make_an_executor(section_name, command_string, working_dir, mkdir_yn):
         #
         ##print(output_raw)
 
-
-
         command_final_string = " ".join(str(x) for x in command_and_args)
         command_final_string.strip()
 
@@ -171,16 +170,15 @@ def make_an_executor(section_name, command_string, working_dir, mkdir_yn):
         else:
             status = "OK"
 
-
         return render_template("output_display.html",
-                               command = command_final_string,
-                               status = status,
-                               username = os_user_name,
-                               host_name = host_name,
-                               working_dir = working_dir,
-                               output = output_string,
-                               error_message = error_message)
-        #return output_string
+                               command=command_final_string,
+                               status=status,
+                               username=os_user_name,
+                               host_name=host_name,
+                               working_dir=working_dir,
+                               output=output_string,
+                               error_message=error_message)
+        # return output_string
 
     # Change the name of handler function to section name, to avoid name collision when Flask makes the route mapping.
     executor.__name__ = section_name
@@ -195,19 +193,28 @@ config = configparser.ConfigParser()
 
 # Due to document, config.read returns a list of file names which were successfully parsed,
 # so if it's empty, an error should be raised.
-config_file_name_in_use = config.read('command_bind.conf')
+config_file_name_in_use = config.read(config_file_name_with_full_path)
 if not config_file_name_in_use:
     # no file be parsed, raise an error, stop the code from init.
-    print("No config file was found, please check the config files.")
-    # todo: test this branch.
-    raise Exception("No config file was found, please check the config files.")
+    print("No config file was found, or the config file is empyt or compromised, please check the config files.")
+    raise SystemExit(1)
 
-# Get some default values for later use.
-# Get port number, used to tell flask which port to be on.
+# Assert all the optional config fields have value.
+# All optional fields should have a default value, or there will be undefined behaviours.
+try:
+    # todo: test this code block.
+    default_working_directory = config.defaults()['working_directory']
+    default_mkdir_if_working_directory_not_exist = config.defaults()['mkdir_if_working_directory_not_exist']
+    default_accept_arguments = config.defaults()['accept_arguments']
+except KeyError:
+    print("Error: Config file is compromised, default value for optional fields not found.")
+    # todo: which field fails? check KeyError, should have the key name, print it to user.
+    raise SystemExit(1)
+
+
 
 ### Init the flask instance app ###
 app = Flask(__name__)
-
 
 ### Iterate through all the sections and make binds ###
 
@@ -216,28 +223,38 @@ for section in config.sections():
     print('\nSection: [' + section + ']\n')
     # Get the fields in this config section.
 
-    # todo: try catch, if the config file is compromised and these mandatory fields are not there, raise an error.
     # Mandatory fields, they must be there or an error is raised and the program will stop.
-    # todo: if command and http_keyword is empty string, stop the code, raise an error.
-    command = config[section]['command']
-    print('['+section+']' + ': command = ' + command)
-    http_keyword = config[section]['http_keyword']
+    try:
+        command = config[section]['command']
+    except KeyError:
+        # If there's no command, since we are fetching the value by key, a KeyError will be raised.
+        print("Error: Mandatory field 'command' not found in section '" + section + "', " +
+                "please check the config file and try again")
+        # Print the error, and exit the code with a return code of 1.
+        raise SystemExit(1)
+
+    print('[' + section + ']' + ': command = ' + command)
+    # Directly use the section name as "http_keyword" for a more concise way to config.
+    # The variable name "http_keyword" will still be used, for the rest part of the code could stay unchanged.
+    http_keyword = section
     print('[' + section + ']' + ': http_keyword = ' + http_keyword)
 
     # Optional fields.
+
+    # All optional fields is asserted to have default values in the DEFAULT section,
+    #  And if there's no optional field key in section, the default value will be used.
+    #  So there's no need to try-catch the KeyError exceptions here.
 
     # working directory, if it's not there, use the value in DEFAULT.
     working_directory = config[section]['working_directory']
     print('[' + section + ']' + ': working_directory = ' + working_directory)
 
     # whether mkdir or not if working directory does not exist during runtime.
-    mkdir_if_working_directory_not_exist = config.getboolean(section,'mkdir_if_working_directory_not_exist')
+    mkdir_if_working_directory_not_exist = config.getboolean(section, 'mkdir_if_working_directory_not_exist')
     print('[' + section + ']' + ': mkdir_if_working_directory_not_exist = ' + str(mkdir_if_working_directory_not_exist))
-
 
     # accept params or not, if it's not set, use the value in DEFAULT.
     accept_arguments = config.getboolean(section, 'accept_arguments')
-
 
     # Get an predefined executor function according the options we just parsed.
 
@@ -252,7 +269,7 @@ for section in config.sections():
     # It can be later parsed to a list with separator '/'. So we can pass  holding the options and arguments.
     # So if 'ls' is bind to '/listfiles', we can call 'ls -l' in this way: 'someIP:port/listfiles/-l'.
     if accept_arguments:
-        print('['+section+']' + ': accept_arguments = true')
+        print('[' + section + ']' + ': accept_arguments = true')
         route_string_with_args = '/' + http_keyword + '/<path:arguments_as_path>'
         print('[' + section + ']' + ': route_string_with_args = ' + route_string_with_args)
         app.route(route_string_with_args)(executor)
@@ -266,10 +283,9 @@ for section in config.sections():
 
     print('[' + section + ']' + ': Command and route registered SUCCESSFULLY.\n')
 
-
 # Entry point of this module.
 print('Port number: ' + str(port_number))
 
 # todo, add arguments, to specify the port and ip mask, and config file
 if __name__ == '__main__':
-    app.run(port = port_number)
+    app.run(port=port_number)
