@@ -7,6 +7,20 @@ import socket
 
 from flask import Flask, render_template
 
+# Default settings:
+
+# The port number to listen on:
+port_number = 8095
+# Host settings, set to 0.0.0.0 by default to allow all the external access.
+# Since most times, this program is supposed to be running in a local network, so it's OK to make it simple.
+# If in your case, it's not OK to make the service public, set the address accordingly.
+host_address = '0.0.0.0'
+# Default config file, set to the 'command_bind.conf' by default, relative to program's folder.
+# If the config file is not in the same folder, you have to specify the full absolute path.
+config_file_name_with_full_path = 'command_bind.conf'
+
+
+
 # The main procedures:
 # 1. Read the config file, check minimum integrity, set the defaults.
 # 2. Loop through all the sections in the config file, for each section entry, make a handler function for it,
@@ -23,12 +37,7 @@ from flask import Flask, render_template
 # 5. When the subprocess execution finished, we render the output into a simple html template, and return it
 #   as a http response.
 
-# Default settings:
-# The port number to listen on:
-port_number = 8095
-# Default config file, set to the  'command_bind.conf' file in the same directory of application folder.
-# Could be override with -c arguments in the main.
-config_file_name_with_full_path = 'command_bind.conf'
+
 
 '''Factory function to generate execution handler functions for each command.'''
 
@@ -199,24 +208,32 @@ if not config_file_name_in_use:
     print("No config file was found, or the config file is empyt or compromised, please check the config files.")
     raise SystemExit(1)
 
+print("Config file: " + " ".join(config_file_name_in_use) + " opened successfully, parsing configs.\n")
+
 # Assert all the optional config fields have value.
 # All optional fields should have a default value, or there will be undefined behaviours.
+print("Parsing [DEFAULT] section: \n")
+
 try:
-    # todo: test this code block.
     default_working_directory = config.defaults()['working_directory']
+    print("[default_working_directory]: " + default_working_directory)
     default_mkdir_if_working_directory_not_exist = config.defaults()['mkdir_if_working_directory_not_exist']
+    print("[default_mkdir_if_working_directory_not_exist]: " + default_mkdir_if_working_directory_not_exist)
     default_accept_arguments = config.defaults()['accept_arguments']
-except KeyError:
-    print("Error: Config file is compromised, default value for optional fields not found.")
-    # todo: which field fails? check KeyError, should have the key name, print it to user.
+    print("[default_accept_arguments]: " + default_accept_arguments)
+except KeyError as e:
+    print("Error: Config file is incomplete, default value for optional fields not found.")
+    print("Missing key: '" + e.args[0] + "'")
     raise SystemExit(1)
 
-
+print("\nDefault options parsed SUCCESSFULLY.\n")
 
 ### Init the flask instance app ###
 app = Flask(__name__)
 
 ### Iterate through all the sections and make binds ###
+
+print("Parsing keyword sections:")
 
 # For each section, read the mandatory and optional fields, setup an executor function, and make binds.
 for section in config.sections():
@@ -285,7 +302,7 @@ for section in config.sections():
 
 # Entry point of this module.
 print('Port number: ' + str(port_number))
+print('Host IP: ' + str(port_number))
 
-# todo, add arguments, to specify the port and ip mask, and config file
 if __name__ == '__main__':
-    app.run(port=port_number)
+    app.run(port=port_number, host=host_address, debug=False)
