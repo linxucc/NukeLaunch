@@ -47,7 +47,7 @@ config_file_name_with_full_path = 'command_bind.conf'
 # We define the main command execution procedures here, so that it is separated with other stuff.
 
 
-def make_an_executor(section_name, command_string, working_dir, mkdir_yn):
+def make_an_executor(section_name, command_string, working_dir, mkdir_yn, shell_yn):
     # Execution handler function used as a view
     def executor(arguments_as_path=None):
         # Error message string. Also used to keep a state of the execution.
@@ -138,22 +138,40 @@ def make_an_executor(section_name, command_string, working_dir, mkdir_yn):
             # Simply put, if shell=False, use sequnce, the first string in sequence will be the command, others ars.
             # If shell=True, use string, or the first string in the seq will be the command, and all the others will
             #   be treated as additional arguments to the shell itself.
-            output_raw = subprocess.check_output(
-                command_and_args, cwd=working_dir, stdin=None, stderr=subprocess.STDOUT, shell=False,
+            if shell_yn:
+                # shell = True, use string to have a more consistent behaviour.
+                # Make the list to shell string, use whitespace to join the command and args
+                shell_string = " ".join(command_and_args)
+                output_raw = subprocess.check_output(
+                shell_string, cwd=working_dir, stdin=None, stderr=subprocess.STDOUT, shell=True,
+                    universal_newlines=False)
+                # output is a bytestream,so we have to transform it into a string using this trick.
+                output_string = "".join(map(chr, output_raw))
+                output_string.strip()
+            else:
+                # shell = False, use list to have a more secure execution.
+                output_raw = subprocess.check_output(
+                    command_and_args, cwd=working_dir, stdin=None, stderr=subprocess.STDOUT, shell=False,
                 universal_newlines=False)
-            # output is a bytestream,so we have to transform it into a string using this trick.
-            output_string = "".join(map(chr, output_raw))
-            output_string.strip()
-        except FileNotFoundError:
+                # output is a bytestream,so we have to transform it into a string using this trick.
+                output_string = "".join(map(chr, output_raw))
+                output_string.strip()
+        except FileNotFoundError as e:
+            # Tested, only shell mode = False, only when list command were used, this exception could be raised.
             error_message = 'Command or executable \'' + command_and_args[0] + \
                             '\' does not exist, check your config, and make sure the executable is accessible' \
                             ' in your working directory'
-            return error_message
+            # In this scenario, since no command is executed, there's no return code, but we have to show one, use 1.
+            error_code = 1
+            output_string = str(e.strerror)
+            print(e.strerror)
         except subprocess.CalledProcessError as execution_error:
             error_message = 'Command \'' + ' '.join(command_and_args) + '\' exit with an error.\n'
             error_code = execution_error.returncode
             output_string = str(execution_error.output)
             print(execution_error.output)
+
+
 
         # Return the execution result.
 
@@ -162,7 +180,7 @@ def make_an_executor(section_name, command_string, working_dir, mkdir_yn):
         #    and newline mark will be discarded, so we do not have the line-by-line display. To get it display properly,
         #    we have to give it some basic CSS hint, so the browser will not mess up the output.
 
-        # The tempalte should display these infomations:
+        # The template should display these information:
         #   the final command, the user, the working dir, the result(status), the output (stdout,stderr),
         #   error message if status is not OK (besides stderr, when other excpetion is raised, we should translate it).
         #
@@ -274,6 +292,9 @@ for section in config.sections():
     # accept params or not, if it's not set, use the value in DEFAULT.
     accept_arguments = config.getboolean(section, 'accept_arguments')
 
+    # enable shell or not, if it's yes, shell command will be supported, but in same time the risk of security is raised.
+    shell_support = config.getboolean(section, 'shell_support')
+
     # Get an predefined executor function according the options we just parsed.
 
     # The command and working directory is already known in config time.
@@ -281,7 +302,7 @@ for section in config.sections():
     #   so section name will be the function name so there's no collision.
     # That's why we need section name, command, working_directory to make a execution handler.
     # The arguments (if any) will be passed during runtime when we got one.
-    executor = make_an_executor(section, command, working_directory, mkdir_if_working_directory_not_exist)
+    executor = make_an_executor(section, command, working_directory, mkdir_if_working_directory_not_exist, shell_support)
 
     # If accept arguments, all the string following the keyword will be copied to a string with all the '/' unaltered.
     # It can be later parsed to a list with separator '/'. So we can pass  holding the options and arguments.
