@@ -74,6 +74,9 @@ def make_an_executor(section_name, command_string, working_dir, mkdir_yn, shell_
         if arguments_as_path:
             # argument list, we get this list through the split() function of string, with '/' as separator.
             argument_list = arguments_as_path.split('/')
+            # remove trailing empty elements, things like 'listroot/arg1/' will be parsed to 'arg1' and ''.
+            while argument_list and (argument_list[-1] == '' or argument_list[-1] is None):
+                argument_list.pop()
             print(argument_list)
         # If path arguments do not exist or is empty, there will be no arguments, we do nothing.
         else:
